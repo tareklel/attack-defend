@@ -1,0 +1,7 @@
+playground.ipynb
+__pycache__
+*.json
+*.jl
+log/*
+.DS_Store
+*.csv
