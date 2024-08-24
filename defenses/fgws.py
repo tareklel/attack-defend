@@ -12,6 +12,10 @@ class FGWS():
     def replace_low_frequency_words(self, x, delta, word_freq, synonyms):
         """
         Replace low-frequency words in a sentence with their most frequent synonym.
+        https://aclanthology.org/2021.eacl-main.13.pdf
+        gamma to be determined by applying defense to non-pertrubed, gamme determined such that only 10% of non-perturbed score - defense on non-perturbed exceed threshold
+        set δ equal to the frequency representing the qth percentile of all frequencies observed by the words eligible for replacement in the training set, 
+        and experiment with q ∈ {0, 10, . . . , 100}
 
         Parameters:
         - x (str): The input sentence.

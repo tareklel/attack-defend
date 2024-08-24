@@ -13,13 +13,12 @@ from tqdm import tqdm
 import numpy as np
 
 
+
 class DatasetManager:
     def __init__(self, dataset_name, subset=None, seed=42):
         # Load the dataset using TextAttack's HuggingFaceDataset class
-        self.train_dataset = HuggingFaceDataset(
-            dataset_name, subset=subset, split='train')
-        self.test_dataset = HuggingFaceDataset(
-            dataset_name, subset=subset, split='test')
+        self.train_dataset = HuggingFaceDataset(dataset_name, subset=subset, split='train')
+        self.test_dataset = HuggingFaceDataset(dataset_name, subset=subset, split='test')
         self.seed = seed  # Store the seed for consistency
         self.train_set = None
         self.validation_set = None
@@ -39,35 +38,35 @@ class DatasetManager:
 
         train_distribution = count_labels(self.train_dataset)
         test_distribution = count_labels(self.test_dataset)
-
+        
         return train_distribution, test_distribution
 
-    def create_train_set(self, num_examples, output_class):
+    def create_train_set(self, output_class=None, num_examples=None):
         # Create a training set with the specified number of examples and output class
-        train_subset = [self.train_dataset[i] for i in range(
-            len(self.train_dataset._dataset)) if self.train_dataset[i][1] == output_class]
+        train_subset = [self.train_dataset[i] for i in range(len(self.train_dataset._dataset))
+                        if output_class is None or self.train_dataset[i][1] == output_class]
         random.seed(self.seed)  # Set the random seed for reproducibility
         random.shuffle(train_subset)
-        self.train_set = train_subset[:num_examples]
+        self.train_set = train_subset[:num_examples] if num_examples else train_subset
         return self.train_set
 
-    def create_validation_set(self, num_examples, output_class):
+    def create_validation_set(self, output_class=None, num_examples=None):
         # Create a validation set from the test set, shuffled
-        validation_subset = [self.test_dataset[i] for i in range(
-            len(self.test_dataset._dataset)) if self.test_dataset[i][1] == output_class]
+        validation_subset = [self.test_dataset[i] for i in range(len(self.test_dataset._dataset))
+                             if output_class is None or self.test_dataset[i][1] == output_class]
         random.seed(self.seed)  # Set the random seed for reproducibility
         random.shuffle(validation_subset)
-        self.validation_set = validation_subset[:num_examples]
+        self.validation_set = validation_subset[:num_examples] if num_examples else validation_subset
         return self.validation_set
 
-    def create_test_set(self, num_examples, output_class):
+    def create_test_set(self, output_class=None, num_examples=None):
         # Create a test set, ensuring it's mutually exclusive from the validation set
         validation_texts = {entry[0]['text'] for entry in self.validation_set}
-        test_subset = [self.test_dataset[i] for i in range(len(
-            self.test_dataset._dataset)) if self.test_dataset[i][1] == output_class and self.test_dataset[i][0]['text'] not in validation_texts]
+        test_subset = [self.test_dataset[i] for i in range(len(self.test_dataset._dataset))
+                       if (output_class is None or self.test_dataset[i][1] == output_class) and self.test_dataset[i][0]['text'] not in validation_texts]
         random.seed(self.seed)  # Set the random seed for reproducibility
         random.shuffle(test_subset)
-        self.test_set = test_subset[:num_examples]
+        self.test_set = test_subset[:num_examples] if num_examples else test_subset
         return self.test_set
 
 
@@ -293,8 +292,8 @@ class DefenseInput():
         return synonyms
 
     def union_wordnet_neighbors(self):
+        self.union_group={}
         for word in tqdm(self.grouped_words):
             synonyms = set(self.get_wordnet_synonyms(word))
-            self.union_group={}
             self.union_group[word] = list(
                 set(self.grouped_words[word]).union(synonyms))
