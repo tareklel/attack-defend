@@ -3,6 +3,8 @@ import numpy as np
 from nltk.corpus import stopwords
 import nltk
 from attackdefend import TextDefend
+import copy
+import helpers
 
 
 class FGWS():
@@ -136,58 +138,70 @@ class FGWS():
         # Calculate the delta that corresponds to the given percentile of word frequencies
         frequencies = sorted([freq for word, freq in defense_input.word_freq.items() if word in defense_input.union_group])
         return np.percentile(frequencies, percentile)
-    
+
     def find_best_delta(self, percentiles, defense_input, validation_set, textdefend, threshold=0.1):
-        """
-        Find the best delta that maximizes restored accuracy while keeping false positives below the threshold.
-        """
-        best_delta = None
-        best_restored_accuracy = 0
-        
-        for percentile in percentiles:
-            delta = self.find_delta_by_percentile(percentile, defense_input)
-            false_positive_count = 0
-            total_count = 0
-            restored_accuracy_count = 0
+            """
+            Find the best delta that maximizes restored accuracy while keeping false positives below the threshold.
+            """
+            best_delta = None
+            best_restored_accuracy = 0
+            textdefend.set_up_attacker(validation_set, len(validation_set))
+            textdefend.get_attack_results()
+            df = helpers.process_analytical_dataset(textdefend.result)
             word_freq = defense_input.word_freq
             union_group = defense_input.union_group
 
-            for original_text, label in validation_set:
-                # Apply perturbation using TextDefend 
-                attack_output = textdefend.attack.attack(original_text, label)
-                perturbed_text = attack_output.perturbed_text()
-                perturbed_result = attack_output.perturbed_result.output
-                
-                # Apply FGWS transformation with the current delta
-                transformed_text = self.replace_low_frequency_words(perturbed_text, delta, word_freq, union_group)
-                
-                # Predict the label using the model within TextDefend
-                predicted_label_transformed = textdefend.attack.attack(transformed_text, label).original_result.output
-                
-                # Compare the predicted label to the true label
-                if label == predicted_label_transformed and label != perturbed_result:
-                    restored_accuracy_count += 1
-                
-                # False positive check on non-perturbed text
-                original_replace = self.replace_low_frequency_words(original_text['text'], delta, word_freq, union_group)
-                original_replace_label = textdefend.attack.attack(original_replace, label).original_result.output
-                if original_replace_label != label:
-                    false_positive_count += 1
-                
-                total_count += 1
-            # Calculate the restored accuracy
-            restored_accuracy = restored_accuracy_count / total_count
-            
-            # Check if this delta produces fewer false positives and better restored accuracy
-            if false_positive_count / total_count <= threshold and restored_accuracy > best_restored_accuracy:
-                best_delta = delta
-                best_restored_accuracy = restored_accuracy
-            print(f"percentile:{percentile}, \
-                  restored_accuracy_count:{restored_accuracy_count}, \
-                  total_count:{total_count}, \
-                  restored_accuracy:{restored_accuracy}, \
-                  false_positive_count:{false_positive_count}, \
-                  fpr:{false_positive_count / total_count}\
-                  ")
+            for percentile in percentiles:
+                delta = self.find_delta_by_percentile(percentile, defense_input)
+                false_positive_count = 0
+                total_count = 0
+                restored_accuracy_count = 0
+                inaccurate_denominator = 0
+                correct_model_prediction = 0
 
-        return best_delta
+
+                for _, row in df.iterrows():
+                    # Apply perturbation using TextDefend 
+                    #attack_output = textdefend.attack.attack(row.original_text, row.ground_truth_label)
+                    perturbed_text = row.perturbed_text
+                    perturbed_result = row.predicted_perturbed_label
+                    
+                    # Apply FGWS transformation with the current delta
+                    transformed_text = self.replace_low_frequency_words(perturbed_text, delta, word_freq, union_group)
+                    
+                    # Predict the label using the model within TextDefend
+                    predicted_label_transformed = textdefend.attack.attack(transformed_text, row.ground_truth_label).original_result.output
+                    
+                    if row.ground_truth_label != perturbed_result:
+                        inaccurate_denominator += 1
+                    # Compare the predicted label to the true label
+                    if row.ground_truth_label == predicted_label_transformed and row.ground_truth_label != perturbed_result:
+                        restored_accuracy_count += 1
+                    
+                    # False positive check on non-perturbed text
+                    original_replace = self.replace_low_frequency_words(row.original_text, delta, word_freq, union_group)
+                    original_replace_label = textdefend.attack.attack(original_replace, row.ground_truth_label).original_result.output
+
+                    if row.original_predicted_label == row.ground_truth_label:
+                        correct_model_prediction += 1
+
+                    if original_replace_label != row.original_predicted_label and row.original_predicted_label == row.ground_truth_label:
+                        false_positive_count += 1
+                    
+                    total_count += 1
+                # Calculate the restored accuracy
+                restored_accuracy = restored_accuracy_count / inaccurate_denominator
+                
+                # Check if this delta produces fewer false positives and better restored accuracy
+                if false_positive_count / correct_model_prediction <= threshold and restored_accuracy > best_restored_accuracy:
+                    best_delta = delta
+                    best_restored_accuracy = restored_accuracy
+                print(f"percentile:{percentile}, \
+                    restored_accuracy_count:{restored_accuracy_count}, \
+                    total_count:{total_count}, \
+                    restored_accuracy:{restored_accuracy}, \
+                    false_positive_count:{false_positive_count}, \
+                    fdr:{false_positive_count / correct_model_prediction}\
+                    ")
+
+            return best_delta

@@ -11,6 +11,7 @@ import os
 from annoy import AnnoyIndex
 from tqdm import tqdm
 import numpy as np
+from datasets import DatasetDict, Dataset
 
 
 
@@ -47,7 +48,14 @@ class DatasetManager:
                         if output_class is None or self.train_dataset[i][1] == output_class]
         random.seed(self.seed)  # Set the random seed for reproducibility
         random.shuffle(train_subset)
-        self.train_set = train_subset[:num_examples] if num_examples else train_subset
+        train_subset = train_subset[:num_examples] if num_examples else train_subset
+
+        # Return a new HuggingFaceDataset instance with the subset
+        train_data = Dataset.from_dict({
+            'text': [x[0]['text'] for x in train_subset],
+            'label': [x[1] for x in train_subset]
+        })
+        self.train_set = HuggingFaceDataset(train_data)
         return self.train_set
 
     def create_validation_set(self, output_class=None, num_examples=None):
@@ -56,17 +64,31 @@ class DatasetManager:
                              if output_class is None or self.test_dataset[i][1] == output_class]
         random.seed(self.seed)  # Set the random seed for reproducibility
         random.shuffle(validation_subset)
-        self.validation_set = validation_subset[:num_examples] if num_examples else validation_subset
+        validation_subset = validation_subset[:num_examples] if num_examples else validation_subset
+
+        # Return a new HuggingFaceDataset instance with the subset
+        validation_data = Dataset.from_dict({
+            'text': [x[0]['text'] for x in validation_subset],
+            'label': [x[1] for x in validation_subset]
+        })
+        self.validation_set = HuggingFaceDataset(validation_data)
         return self.validation_set
 
     def create_test_set(self, output_class=None, num_examples=None):
         # Create a test set, ensuring it's mutually exclusive from the validation set
         validation_texts = {entry[0]['text'] for entry in self.validation_set}
-        test_subset = [self.test_dataset[i] for i in range(len(self.test_dataset._dataset))
+        test_subset = [self.test_dataset[i] for i in range(len(self.test_dataset))
                        if (output_class is None or self.test_dataset[i][1] == output_class) and self.test_dataset[i][0]['text'] not in validation_texts]
         random.seed(self.seed)  # Set the random seed for reproducibility
         random.shuffle(test_subset)
-        self.test_set = test_subset[:num_examples] if num_examples else test_subset
+        test_subset = test_subset[:num_examples] if num_examples else test_subset
+
+        # Return a new HuggingFaceDataset instance with the subset
+        test_data = Dataset.from_dict({
+            'text': [x[0]['text'] for x in test_subset],
+            'label': [x[1] for x in test_subset]
+        })
+        self.test_set = HuggingFaceDataset(test_data)
         return self.test_set
 
 

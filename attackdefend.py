@@ -21,20 +21,19 @@ class TextDefend():
             model_wrapper = PyTorchModelWrapper(
                 lstm_model, lstm_model.tokenizer)
             return model_wrapper
-        else:
+        else: 
             # raise error modelnotfound
             raise ModuleNotFoundError
 
-    def init_attack(self, attack, num_attacks):
+    def init_attack(self, attack):
         self.attack = attack.build(self.model_wrapper)
+    
+    def set_up_attacker(self, dataset, num_attacks):
         self.attack_args = AttackArgs(
             num_examples=num_attacks, 
             disable_stdout=True,  # Disable output to console for cleaner display
         )
-    
-    def set_up_attacker(self, dataset):
         self.attacker = Attacker(self.attack, dataset, self.attack_args)
     
     def get_attack_results(self):
         self.result = self.attacker.attack_dataset()
-        return  self.attacker.attack_dataset()
