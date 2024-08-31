@@ -132,26 +132,44 @@ class FGWS():
         for percentile in percentiles:
             delta = self.find_delta_by_percentile(percentile, defense_input)
 
-            df['replaced_sentence'] = df['perturbed_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
-
+            df['replaced_perturbed_sentence'] = df['perturbed_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
+            df['replaced_original_sentence'] = df['original_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
             # create HugginFaceDataset instance with replaced_sentence
-            replaced_data = Dataset.from_dict({
-            'text': [x for x in df['replaced_sentence']], 
+            replaced_perturbed_data = Dataset.from_dict({
+            'text': [x for x in df['replaced_perturbed_sentence']], 
             'label': [x for x in df['ground_truth_label']]
             })
-            replaced_dataset = HuggingFaceDataset(replaced_data)
-            textdefend.set_up_attacker(replaced_dataset, len(replaced_dataset))
+            replaced_perturbed_dataset = HuggingFaceDataset(replaced_perturbed_data)
+            textdefend.set_up_attacker(replaced_perturbed_dataset, len(replaced_perturbed_dataset))
             textdefend.get_attack_results()
-            defense_results = helpers.process_analytical_dataset(textdefend.result)
-            defense_results['inaccurate_denominator'] = (df['ground_truth_label'] != df['predicted_perturbed_label'])&(df['ground_truth_label'] == df['original_predicted_label'])
-            defense_results['restored_accuracy_count'] = (defense_results['ground_truth_label'] == defense_results['original_predicted_label']) & (defense_results['inaccurate_denominator'])
-            
-            restored_accuracy = defense_results['restored_accuracy_count'].sum() / defense_results['inaccurate_denominator'].sum()
-            
+            defense_perturbed_results = helpers.process_analytical_dataset(textdefend.result)
+
+            replaced_original_data = Dataset.from_dict({
+            'text': [x for x in df['replaced_original_sentence']], 
+            'label': [x for x in df['ground_truth_label']]
+            })
+
+            replaced_original_dataset = HuggingFaceDataset(replaced_original_data)
+            textdefend.set_up_attacker(replaced_original_dataset, len(replaced_original_dataset))
+            textdefend.get_attack_results()
+            defense_original_results = helpers.process_analytical_dataset(textdefend.result)
+
+            # get gamma
             cond = (df['ground_truth_label'] == df['original_predicted_label'])
-            defense_results.loc[cond, 'gamma'] = df['original_prediction_score'] - defense_results['original_prediction_score']
-            sorted_gammas = defense_results[defense_results.gamma.notna()]['gamma'].sort_values()
+            df.loc[cond, 'gamma'] = df['original_prediction_score'] - defense_original_results['original_prediction_score']
+
+            sorted_gammas = df[df.gamma.notna()]['gamma'].sort_values()
             gamma = np.percentile(sorted_gammas, 90)
+
+            # evaluate defense
+            defense_perturbed_results['is_adversarial'] = df['perturbed_output_score'] - defense_perturbed_results['original_prediction_score'] > gamma
+
+            defense_perturbed_results['inaccurate_denominator'] = (df['ground_truth_label'] != df['predicted_perturbed_label'])&(df['ground_truth_label'] == df['original_predicted_label'])
+            defense_perturbed_results['correct_prediction'] = (defense_perturbed_results['ground_truth_label'] == defense_perturbed_results['original_predicted_label'])
+            defense_perturbed_results['restored_accuracy_count'] = (defense_perturbed_results['correct_prediction']) & (defense_perturbed_results['is_adversarial']) & (defense_perturbed_results['inaccurate_denominator'])
+            
+            restored_accuracy = defense_perturbed_results['restored_accuracy_count'].sum() / defense_perturbed_results['inaccurate_denominator'].sum()
+            
             print(f"percentile:{percentile}, \
                 restored_accuracy:{restored_accuracy}, \
                 gamma:{gamma}")
