@@ -147,6 +147,52 @@ def process_analytical_dataset(results):
     return df
 
 
+def assess_defense(df):
+    original_accurate = df['ground_truth_label'] == df['original_predicted_label']
+    original_accuracy = original_accurate.sum() / len(df['ground_truth_label'])
+    adversarial_accurate = df['ground_truth_label'] == df['predicted_perturbed_label']
+    adversarial_accuracy = adversarial_accurate.sum() / len(df['ground_truth_label'])
+    defense_accurate = df['defense_output_label'] == df['ground_truth_label']
+    restored_accuracy = defense_accurate.sum() / len(df['ground_truth_label'])
+    restored_accuracy_delta = restored_accuracy - adversarial_accuracy
+    # positive here means is adversarial
+
+    # adversarial
+    adversarial_fn = ~(df['predict_as_attack']) & (df['attack_success'])
+    adversarial_fnr = adversarial_fn.sum() / df['attack_success'].sum()
+    # recall tp / (tp+fn)
+    adversarial_tp = (df['predict_as_attack']) & (df['attack_success'])
+    adversarial_recall = adversarial_tp.sum() / df['attack_success'].sum()
+    # precision tp / (tp+fp)
+    adversarial_precision = adversarial_tp.sum() / df['predict_as_attack'].sum()
+    adversarial_f1 = 2*(adversarial_precision*adversarial_recall)/(adversarial_precision + adversarial_recall)
+
+    # defense
+    df['attack_success_original_success'] = (df['attack_success']) & ~df['original_model_fail_prediction']
+    defense_fn = ~(df['predict_as_attack']) & df['attack_success_original_success']
+    defense_fnr = defense_fn.sum() / df['attack_success_original_success'].sum()
+    # recall tp / (tp+fn)
+    defense_tp = (df['predict_as_attack']) & (df['attack_success_original_success'])
+    defense_recall = defense_tp.sum() / df['attack_success_original_success'].sum()
+    # precision tp / (tp+fp)
+    df['predict_attack_original_success'] = (df['predict_as_attack']) & ~df['original_model_fail_prediction']
+    defense_precision = defense_tp.sum() / df['predict_attack_original_success'].sum()
+    defense_f1 = 2*(defense_precision*defense_recall)/(defense_precision + defense_recall)
+
+    return {
+        'original_accuracy':original_accuracy,
+        'adversarial_accuracy':adversarial_accuracy,
+        'restored_accuracy':restored_accuracy,
+        # delta between restored_accuracy and adversarial_accuracy
+        'restored_accuracy_delta':restored_accuracy_delta,
+        # check if adversarial incorrectly labeled as non-adversarial
+        'defense_false_negative_rate':defense_fnr,
+        'defense_recall':defense_recall,
+        'defense_precision':defense_precision,
+        'defense_f1-score':defense_f1
+    }
+
+
 def extract_text_from_dataset(dataset, text_index=0):
     """
     Extracts the text data from a HuggingFaceDataset and returns it as a list of strings.
