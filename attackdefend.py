@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from textattack.models.wrappers import PyTorchModelWrapper
-
+import torch 
 
 class TextDefend():
     def __init__(self, model_name: str):
@@ -37,3 +37,27 @@ class TextDefend():
     
     def get_attack_results(self):
         self.result = self.attacker.attack_dataset()
+    
+    def get_prediction_and_score(self, text: list):
+        # Ensure the input is a list of texts
+        if isinstance(text, str):
+            text = [text]
+
+        # Call the model wrapper to get logits
+        evals = self.model_wrapper(text)
+        output = []
+
+        # Iterate over the logits for each input text
+        for logits in evals:
+            # Apply exponentiation to logits and calculate softmax for binary classification
+            exps = np.exp(logits)
+            prediction_score = np.round(exps[1] / exps.sum(), 6)
+            
+            # Determine the predicted label (0 or 1) based on the prediction score
+            predicted_label = int(np.round(prediction_score))
+            
+            # Append the result as a tuple (score, label) to the output list
+            output.append((prediction_score, predicted_label))
+
+        # Return the result, either as a single tuple or a list of tuples
+        return output[0] if len(output) == 1 else output
