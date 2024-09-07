@@ -83,28 +83,17 @@ class FGWS():
         union_group = defense_input.union_group
         # Initialize new columns to store the defense results
         df['replaced_sentence'] = None
-        df['defense_output_label'] = None
-        df['defense_output_score'] = None
         df['defense_vs_attack_label_diff'] = None
         df['attack_vs_defense_score_diff'] = None
         df['predict_as_attack'] = None
 
         df['replaced_sentence'] = df['perturbed_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
-
-        # create HugginFaceDataset instance with replaced_sentence
-        replaced_data = Dataset.from_dict({
-        'text': [x for x in df['replaced_sentence']], 
-        'label': [x for x in df['ground_truth_label']]
-        })
-        replaced_dataset = HuggingFaceDataset(replaced_data)
-        textdefend.set_up_attacker(replaced_dataset, len(replaced_dataset))
-        textdefend.get_attack_results()
-        results = helpers.process_analytical_dataset(textdefend.result)
+        df[['defense_output_score', 'defense_output_label']] = df['replaced_sentence']\
+            .apply(lambda x: textdefend.get_prediction_and_score(x))\
+            .apply(pd.Series)
 
         # Append the results to the DataFrame
-        df['defense_output_label'] = results['original_predicted_label']
-        df['defense_output_score'] = results['original_prediction_score']
-        df['defense_vs_attack_label_diff'] = results['original_predicted_label'] != df['predicted_perturbed_label']
+        df['defense_vs_attack_label_diff'] = df['defense_output_label'] != df['predicted_perturbed_label']
         df['attack_vs_defense_score_diff'] = df['perturbed_output_score'] - df['defense_output_score']
         df['predict_as_attack'] = df['attack_vs_defense_score_diff'] > gamma
 
