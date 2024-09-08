@@ -7,12 +7,11 @@ import string
 import re
 import pandas as pd
 from collections import Counter
-
+from helpers import assess_defense
 
 
 class RSV():
     def __init__(self, textdefend, defense_input, number_of_votes,):
-        self.seed_iterations = [x for x in range(number_of_votes)]
         self.defense_input = defense_input
         self.textdefend = textdefend
         self.commonwords = set()
@@ -65,11 +64,9 @@ class RSV():
         predictions = self.textdefend.get_prediction_and_score(sentences)
         if len(sentences) == 1:
             predictions = [predictions]
-        prediction = [x[1] for x in predictions]
         prediction_score = np.mean([x[0] for x in predictions])
-        counter = Counter(prediction)
-        most_frequent = counter.most_common(1)[0][0]
-        return most_frequent, prediction_score
+        predition_label = int(np.round(prediction_score,0))
+        return predition_label, prediction_score
     
     def apply_rsv(self, sentence, proportion_of_words, list_length=1):
         subs = self._get_list_of_substitutions(sentence, proportion_of_words, list_length)
@@ -111,5 +108,45 @@ class RSV():
         [self.commonwords.add(x) for x in list(sorted_dict.keys())[:top_threshold]]
         [self.commonwords.add(x) for x in stop_words]
         [self.commonwords.add(x) for x in punctuations]
-            
     
+    def greedy_search(self, df, list_number_of_votes, list_proportion_of_words):
+        best_score = float('-inf')
+        best_params = {}
+        recommended_gamma = None
+
+        for number_of_votes in list_number_of_votes:
+            for proportion_of_words in list_proportion_of_words:
+                # Apply defense and reattack with current parameter combination
+                df_copy = df.copy()  # Copy the dataframe to avoid overwriting original data
+                result_df = self.apply_defense_and_reattack(df_copy, proportion_of_words, number_of_votes)
+
+                # Assess the defense using restored_accuracy
+                metrics = assess_defense(result_df)
+                restored_accuracy = metrics['restored_accuracy']
+
+                # Apply RSV to the original text for the gamma calculation
+                df_copy[['defense_original_output_score', 'defense_original_output_label']] = df_copy['original_text']\
+                    .apply(lambda x: self.apply_rsv(x, proportion_of_words, number_of_votes))\
+                    .apply(pd.Series)
+
+                # Calculate gamma
+                cond = (df_copy['ground_truth_label'] == df_copy['original_predicted_label'])
+                df_copy.loc[cond, 'gamma'] = df_copy['original_prediction_score'] - df_copy['defense_original_output_score']
+
+                # Get the 90th percentile of gamma
+                sorted_gammas = df_copy[df_copy['gamma'].notna()]['gamma'].sort_values()
+                gamma = np.percentile(sorted_gammas, 90)
+
+
+                # Update the best score and parameters if the current score is better
+                if restored_accuracy > best_score:
+                    best_score = restored_accuracy
+                    best_params = {
+                        'number_of_votes': number_of_votes,
+                        'proportion_of_words': proportion_of_words,
+                        'gamma':gamma
+                    }
+
+        # Return the best parameters, restored accuracy, and recommended gamma
+        return best_params, best_score
+        
