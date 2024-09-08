@@ -25,31 +25,34 @@ class RSV():
     
     def _apply_random_substitution(self, text, number_of_words, seed=42):
         random.seed(seed)
-        words = re.findall(r'\w+|[^\w\s]', text)
-        eligible_words = set(
-        word for word in words
-        if word.isalpha()                        # Exclude punctuation/numbers
-        and word.lower() in self.defense_input.grouped_words.keys()
-        and len(self.defense_input.grouped_words[word.lower()]) > 0               # Exclude words with no synonyms
-        and word.lower() not in self.commonwords # Exclude words in self.commonwords
 
+        # Tokenize everything: words, punctuation, and spaces.
+        tokens = re.findall(r'\w+|[^\w\s]|\s+', text)
+
+        # Find eligible words for substitution (exclude punctuation, spaces, and common words)
+        eligible_words = set(
+            token for token in tokens
+            if token.isalpha()  # We only want alphabetic words, excluding punctuation and spaces
+            and token.lower() in self.defense_input.grouped_words.keys()  # Ensure the word has a synonym
+            and len(self.defense_input.grouped_words[token.lower()]) > 0  # Exclude words with no synonyms
+            and token.lower() not in self.commonwords  # Exclude common words
         )
 
-        # Ensure we don’t select more words than available
+        # Ensure we don’t select more words than are available
         num_words_to_replace = min(number_of_words, len(eligible_words))
 
         # Randomly select words for substitution
         words_to_replace = random.sample(sorted(eligible_words), num_words_to_replace)
 
-        # Replace the words while keeping the structure intact
-        modified_words = [
-            self._get_random_synonym(word, seed) if word in words_to_replace else word
-            for word in words
+        # Replace words while preserving structure
+        modified_tokens = [
+            self._get_random_synonym(token, seed) if token in words_to_replace else token
+            for token in tokens
         ]
-        
-        # Join and return the modified sentence
-        return ' '.join(modified_words)
 
+        # Join the tokens back into a single string
+        return ''.join(modified_tokens)
+    
     def _get_list_of_substitutions(self, sentence, proportion_of_words=0.25, list_length=1):
         subs =[]
         for x in range(list_length):
@@ -68,11 +71,11 @@ class RSV():
         most_frequent = counter.most_common(1)[0][0]
         return most_frequent, prediction_score
     
-    def apply_rsv(self, sentence, proportion_of_words=0.25, list_length=1):
+    def apply_rsv(self, sentence, proportion_of_words, list_length=1):
         subs = self._get_list_of_substitutions(sentence, proportion_of_words, list_length)
         return self.vote_for_substitution(subs)
     
-    def apply_defense_and_reattack(self, df, proportion_of_words=0.25, list_length=1, gamma=0.5):
+    def apply_defense_and_reattack(self, df, proportion_of_words, list_length=1, gamma=0.5):
         # Initialize new columns to store the defense results
         df['defense_output_label'] = None
         df['defense_output_score'] = None
