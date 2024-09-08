@@ -1,13 +1,9 @@
-from tqdm import tqdm
 import numpy as np
 from nltk.corpus import stopwords
-import nltk
 from attackdefend import TextDefend
-import copy
 import helpers
-from datasets import Dataset
-from textattack.datasets import HuggingFaceDataset
 import pandas as pd
+import re
 
 
 class FGWS():
@@ -15,48 +11,36 @@ class FGWS():
         pass
     
     def replace_low_frequency_words(self, x, delta, word_freq, synonyms):
-        """
-        Replace low-frequency words in a sentence with their most frequent synonym.
-        https://aclanthology.org/2021.eacl-main.13.pdf
-        gamma to be determined by applying defense to non-pertrubed, gamme determined such that only 10% of non-perturbed score - defense on non-perturbed exceed threshold
-        set δ equal to the frequency representing the qth percentile of all frequencies observed by the words eligible for replacement in the training set, 
-        and experiment with q ∈ {0, 10, . . . , 100}
-
-        Parameters:
-        - x (str): The input sentence.
-        - delta (int): The frequency threshold. Words with a frequency below this will be replaced.
-        - word_freq (dict): A dictionary where keys are words and values are their frequencies.
-        - synonyms (dict): A dictionary where keys are words and values are lists of synonyms.
-
-        Returns:
-        - str: The modified sentence with low-frequency words replaced by synonyms.
-        """
-        
         # Load English stopwords
         stop_words = set(stopwords.words('english'))
         
-        # Tokenize the input string into words
-        words = nltk.word_tokenize(x)
+        # Tokenize the input string into words and punctuation
+        tokens = re.findall(r'\w+|[^\w\s]|\s+', x)
         
-        # List to store the modified words
+        # List to store the modified tokens
         modified_sentence = []
         
-        # Iterate over each word in the sentence
-        for word in words:
-            # If the word is a stopword or not in the frequency dictionary, keep it unchanged
-            if word.lower() in stop_words or word.lower() not in word_freq:
-                modified_sentence.append(word)
+        # Iterate over each token
+        for token in tokens:
+            # If the token is not an alphabetic word (i.e., it's punctuation or space), keep it unchanged
+            if not token.isalpha():
+                modified_sentence.append(token)
                 continue
             
-            # Check the frequency of the word against the threshold
-            frequency = word_freq.get(word.lower(), 0)
+            # If the token is a stopword or not in the frequency dictionary, keep it unchanged
+            if token.lower() in stop_words or token.lower() not in word_freq:
+                modified_sentence.append(token)
+                continue
+            
+            # Check the frequency of the token against the threshold
+            frequency = word_freq.get(token.lower(), 0)
             if frequency < delta:
                 # Replace with a synonym that has the highest frequency, if available
-                if word.lower() in synonyms:
+                if token.lower() in synonyms:
                     # Filter out synonyms that are stopwords or have no frequency data
                     candidate_synonyms = [
                         (syn, word_freq.get(syn, 0)) 
-                        for syn in synonyms[word.lower()] 
+                        for syn in synonyms[token.lower()] 
                         if syn not in stop_words and syn in word_freq
                     ]
                     
@@ -65,17 +49,17 @@ class FGWS():
                         best_synonym = max(candidate_synonyms, key=lambda item: item[1])[0]
                         modified_sentence.append(best_synonym)
                     else:
-                        # If no valid synonym is found, keep the original word
-                        modified_sentence.append(word)
+                        # If no valid synonym is found, keep the original token
+                        modified_sentence.append(token)
                 else:
-                    # If the word has no synonyms, keep the original word
-                    modified_sentence.append(word)
+                    # If the token has no synonyms, keep the original token
+                    modified_sentence.append(token)
             else:
-                # If the word's frequency is above the threshold, keep it unchanged
-                modified_sentence.append(word)
+                # If the token's frequency is above the threshold, keep it unchanged
+                modified_sentence.append(token)
         
         # Join the list into a single string and return the modified sentence
-        return ' '.join(modified_sentence)
+        return ''.join(modified_sentence)
 
     
     def apply_defense_and_reattack(self, df, textdefend: TextDefend, defense_input, delta=10, gamma=0.5):
