@@ -179,8 +179,11 @@ def assess_defense(df):
     defense_precision = defense_tp.sum() / df['predict_attack_original_success'].sum()
     defense_f1 = 2*(defense_precision*defense_recall)/(defense_precision + defense_recall)
 
+    benign_accuracy = df['original_replaced_label_correct'].sum() / len(df['ground_truth_label'])
+
     return {
         'original_accuracy':original_accuracy,
+        'benign_accuracy':benign_accuracy,
         'adversarial_accuracy':adversarial_accuracy,
         'restored_accuracy':restored_accuracy,
         # delta between restored_accuracy and adversarial_accuracy

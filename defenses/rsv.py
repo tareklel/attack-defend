@@ -8,10 +8,10 @@ import re
 import pandas as pd
 from collections import Counter
 from helpers import assess_defense
-
+from tqdm import tqdm
 
 class RSV():
-    def __init__(self, textdefend, defense_input, number_of_votes,):
+    def __init__(self, textdefend, defense_input):
         self.defense_input = defense_input
         self.textdefend = textdefend
         self.commonwords = set()
@@ -88,6 +88,17 @@ class RSV():
         df['attack_vs_defense_score_diff'] = df['perturbed_output_score'] - df['defense_output_score']
         df['predict_as_attack'] = df['attack_vs_defense_score_diff'] > gamma
 
+        # check accuracy on original
+        df[['original_replaced_output_label', 'original_replaced_output_score']] = df['original_text']\
+            .apply(lambda x: self.apply_rsv(x, proportion_of_words, list_length))\
+            .apply(pd.Series)
+
+        # Append the results to the DataFrame
+        df['original_vs_original_replaced_label_diff'] = df['original_replaced_output_label'] != df['original_predicted_label']
+        df['original_replaced_label_correct'] = df['original_replaced_output_label'] == df['ground_truth_label']
+        df['original_replaced_score_diff'] = df['original_prediction_score'] - df['original_replaced_output_score']
+        df['predict_original_as_attack'] = df['original_replaced_score_diff'] > gamma
+
         return df
 
     def get_stop_words(self, threshold=0.02):
@@ -106,15 +117,14 @@ class RSV():
             )}
         top_threshold = round(len(sorted_dict.keys())*threshold)
         [self.commonwords.add(x) for x in list(sorted_dict.keys())[:top_threshold]]
-        [self.commonwords.add(x) for x in stop_words]
-        [self.commonwords.add(x) for x in punctuations]
+        #[self.commonwords.add(x) for x in stop_words]
+        #[self.commonwords.add(x) for x in punctuations]
     
     def greedy_search(self, df, list_number_of_votes, list_proportion_of_words):
         best_score = float('-inf')
         best_params = {}
-        recommended_gamma = None
 
-        for number_of_votes in list_number_of_votes:
+        for number_of_votes in tqdm(list_number_of_votes):
             for proportion_of_words in list_proportion_of_words:
                 # Apply defense and reattack with current parameter combination
                 df_copy = df.copy()  # Copy the dataframe to avoid overwriting original data

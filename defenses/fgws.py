@@ -1,7 +1,7 @@
 import numpy as np
 from nltk.corpus import stopwords
 from attackdefend import TextDefend
-import helpers
+from tqdm import tqdm
 import pandas as pd
 import re
 
@@ -81,6 +81,19 @@ class FGWS():
         df['attack_vs_defense_score_diff'] = df['perturbed_output_score'] - df['defense_output_score']
         df['predict_as_attack'] = df['attack_vs_defense_score_diff'] > gamma
 
+        # check accuracy on original
+        df['original_replaced'] = df['original_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
+        df[['original_replaced_output_score', 'original_replaced_output_label']] = df['original_replaced']\
+            .apply(lambda x: textdefend.get_prediction_and_score(x))\
+            .apply(pd.Series)
+
+        # Append the results to the DataFrame
+        df['original_vs_original_replaced_label_diff'] = df['original_replaced_output_label'] != df['original_predicted_label']
+        df['original_replaced_label_correct'] = df['original_replaced_output_label'] == df['ground_truth_label']
+        df['original_replaced_score_diff'] = df['original_prediction_score'] - df['original_replaced_output_score']
+        df['predict_original_as_attack'] = df['original_replaced_score_diff'] > gamma
+
+
         return df
         
 
@@ -90,20 +103,18 @@ class FGWS():
         frequencies = sorted([freq for word, freq in defense_input.word_freq.items() if word in defense_input.union_group])
         return np.percentile(frequencies, percentile)
 
-    def find_best_delta_gamma(self, percentiles, defense_input, validation_set, textdefend):
+    def find_best_delta_gamma(self, percentiles, defense_input, dataframe, textdefend):
         """
         Find the best delta that maximizes restored accuracy while keeping false positives below the threshold.
         """
         best_delta = None
         best_gamma = None
         best_restored_accuracy = 0
-        textdefend.set_up_attacker(validation_set, len(validation_set))
-        textdefend.get_attack_results()
-        df = helpers.process_analytical_dataset(textdefend.result)
+        df = dataframe.copy()
         word_freq = defense_input.word_freq
         union_group = defense_input.union_group
 
-        for percentile in percentiles:
+        for percentile in tqdm(percentiles):
             delta = self.find_delta_by_percentile(percentile, defense_input)
 
             df['replaced_perturbed_sentence'] = df['perturbed_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
