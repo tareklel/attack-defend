@@ -15,6 +15,7 @@ class CAASR:
         self.textdefend = textdefend
         self.defense_input = defense_input
         self._get_stop_words()
+        self.max_freq = max(self.defense_input.word_freq.values())
 
         # Initialize BERT tokenizer and model for masked language modeling
         # self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -140,10 +141,28 @@ class CAASR:
         if len(frequency) == 0:
             return None
         greatest = max(frequency, key=frequency.get)
-        if self.defense_input.word_freq[greatest] > self.defense_input.word_freq[word]:
+
+        try:
+            word_frequency = self.defense_input.word_freq[word]
+        except KeyError:
+            word_frequency = 1
+        if self.defense_input.word_freq[greatest] > word_frequency:
             return greatest
         else:
             return word
+        
+    def get_softmax(self, sorted_word_info, alpha, beta, gamma):
+        row = sorted_word_info.copy()
+        for x in row.keys():
+            row[x]['frequency_normalized'] = 1 - np.log(row[x]['frequency']+1)/np.log(self.max_freq)
+            row[x]['exponent'] = np.e**(row[x]['saliency'] * alpha + row[x]['distance_from_most_common'] * beta + row[x]['frequency_normalized'] * gamma)
+
+        sum_exp = sum([row[x]['exponent'] for x in row.keys()])
+
+        for x in row.keys():
+            row[x]['softmax'] = row[x]['exponent'] / sum_exp
+        return row
+
         
     def get_scores(self, text):
         """
@@ -177,7 +196,8 @@ class CAASR:
                     'word_name': word,
                     'saliency': saliency,
         #            'bert_probability': bert_prob,
-                    'frequency': self.defense_input.word_freq.get(word.lower(), 0)
+                    'frequency': self.defense_input.word_freq.get(word.lower(), 0),
+                    'distance_from_most_common':self.distance_from_most_common(word)
                     # You can add more attributes here as needed
                 }
 
