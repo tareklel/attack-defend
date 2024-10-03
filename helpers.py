@@ -58,38 +58,65 @@ class DatasetManager:
         self.train_set = HuggingFaceDataset(train_data)
         return self.train_set
 
-    def create_validation_set(self, output_class=None, num_examples=None):
-        # Create a validation set from the test set, shuffled
-        validation_subset = [self.test_dataset[i] for i in range(len(self.test_dataset._dataset))
-                             if output_class is None or self.test_dataset[i][1] == output_class]
-        random.seed(self.seed)  # Set the random seed for reproducibility
-        random.shuffle(validation_subset)
-        validation_subset = validation_subset[:num_examples] if num_examples else validation_subset
+    def create_validation_set(self, output_classes=None, num_examples=None):
+        # Create validation sets for each class and assign them to separate instance variables
+        if output_classes is None:
+            output_classes = list(set([self.test_dataset[i][1] for i in range(len(self.test_dataset._dataset))]))
 
-        # Return a new HuggingFaceDataset instance with the subset
-        validation_data = Dataset.from_dict({
-            'text': [x[0]['text'] for x in validation_subset],
-            'label': [x[1] for x in validation_subset]
-        })
-        self.validation_set = HuggingFaceDataset(validation_data)
-        return self.validation_set
+        self.validation_texts = set()  # To store all validation texts across classes
 
-    def create_test_set(self, output_class=None, num_examples=None):
-        # Create a test set, ensuring it's mutually exclusive from the validation set
-        validation_texts = {entry[0]['text'] for entry in self.validation_set}
-        test_subset = [self.test_dataset[i] for i in range(len(self.test_dataset))
-                       if (output_class is None or self.test_dataset[i][1] == output_class) and self.test_dataset[i][0]['text'] not in validation_texts]
-        random.seed(self.seed)  # Set the random seed for reproducibility
-        random.shuffle(test_subset)
-        test_subset = test_subset[:num_examples] if num_examples else test_subset
+        for output_class in output_classes:
+            # Gather examples for the current class
+            class_examples = [self.test_dataset[i] for i in range(len(self.test_dataset._dataset))
+                            if self.test_dataset[i][1] == output_class]
+            random.seed(self.seed)  # Set the random seed for reproducibility
+            random.shuffle(class_examples)
 
-        # Return a new HuggingFaceDataset instance with the subset
-        test_data = Dataset.from_dict({
-            'text': [x[0]['text'] for x in test_subset],
-            'label': [x[1] for x in test_subset]
-        })
-        self.test_set = HuggingFaceDataset(test_data)
-        return self.test_set
+            # Limit the number of examples for each class to num_examples
+            if num_examples:
+                class_examples = class_examples[:num_examples]
+
+            # Create the validation set for the current class
+            validation_data = Dataset.from_dict({
+                'text': [x[0]['text'] for x in class_examples],
+                'label': [x[1] for x in class_examples]
+            })
+
+            # Add validation texts to the set to avoid overlap with the test set
+            self.validation_texts.update([x[0]['text'] for x in class_examples])
+
+            # Dynamically set the class-specific validation dataset as an instance variable
+            setattr(self, f'validation_set_{output_class}', HuggingFaceDataset(validation_data))
+
+        return {f'validation_set_{output_class}': getattr(self, f'validation_set_{output_class}') for output_class in output_classes}
+
+    def create_test_set(self, output_classes=None, num_examples=None):
+        # Create test sets for each class and assign them to separate instance variables, excluding validation examples
+        if output_classes is None:
+            output_classes = list(set([self.test_dataset[i][1] for i in range(len(self.test_dataset._dataset))]))
+
+        for output_class in output_classes:
+            # Gather examples for the current class, excluding those in the validation set
+            class_examples = [self.test_dataset[i] for i in range(len(self.test_dataset._dataset))
+                            if self.test_dataset[i][1] == output_class and self.test_dataset[i][0]['text'] not in self.validation_texts]
+            random.seed(self.seed)  # Set the random seed for reproducibility
+            random.shuffle(class_examples)
+
+            # Limit the number of examples for each class to num_examples
+            if num_examples:
+                class_examples = class_examples[:num_examples]
+
+            # Create the test set for the current class
+            test_data = Dataset.from_dict({
+                'text': [x[0]['text'] for x in class_examples],
+                'label': [x[1] for x in class_examples]
+            })
+
+            # Dynamically set the class-specific test dataset as an instance variable
+            setattr(self, f'test_set_{output_class}', HuggingFaceDataset(test_data))
+
+        return {f'test_set_{output_class}': getattr(self, f'test_set_{output_class}') for output_class in output_classes}
+
 
 
 def process_analytical_dataset(results):
