@@ -195,14 +195,14 @@ def assess_defense(df):
     adversarial_f1 = 2*(adversarial_precision*adversarial_recall)/(adversarial_precision + adversarial_recall)
 
     # defense
-    df['attack_success_original_success'] = (df['attack_success']) & ~df['original_model_fail_prediction']
+    df['attack_success_original_success'] = (df['attack_success'].apply(lambda x: True if x==1 else False)) & ~df['original_model_fail_prediction'].apply(lambda x: False if x==0 else True)
     defense_fn = ~(df['predict_as_attack']) & df['attack_success_original_success']
     defense_fnr = defense_fn.sum() / df['attack_success_original_success'].sum()
     # recall tp / (tp+fn)
     defense_tp = (df['predict_as_attack']) & (df['attack_success_original_success'])
     defense_recall = defense_tp.sum() / df['attack_success_original_success'].sum()
     # precision tp / (tp+fp)
-    df['predict_attack_original_success'] = (df['predict_as_attack']) & ~df['original_model_fail_prediction']
+    df['predict_attack_original_success'] = (df['predict_as_attack'].apply(lambda x: True if x==1 else False)) & ~df['original_model_fail_prediction'].apply(lambda x: False if x==0 else True)
     defense_precision = defense_tp.sum() / df['predict_attack_original_success'].sum()
     defense_f1 = 2*(defense_precision*defense_recall)/(defense_precision + defense_recall)
 

@@ -76,13 +76,18 @@ class SGRV:
         [self.commonwords.add(x) for x in punctuations]
         [self.commonwords.add(x) for x in stop_words]
 
-    def get_softmax(self, sorted_word_info, alpha=1):
+    def get_softmax(self, sorted_word_info, prediction_label, alpha=1):
         row = sorted_word_info.copy()
         #row = {x: row[x] for x in row if row[x]['word_name'].lower(
         #    ) not in  self.commonwords}
         for x in row.keys():
+            if prediction_label == 0:
+                row[x]['exponent'] = np.e**(((1 + row[x]['saliency'])/2)**2 * alpha)
+            elif prediction_label == 1:
+                row[x]['exponent'] = np.e**((1-(1 + row[x]['saliency'])/2)**2 * alpha)
+            else:
+                raise ValueError('Prediction label should be either 0 or 1')
             #row[x]['exponent'] = np.e**(row[x]['saliency']* alpha)
-            row[x]['exponent'] = np.e**(((1 + row[x]['saliency'])/2)**2 * alpha)
 
         sum_exp = sum([row[x]['exponent'] for x in row.keys()])
 
@@ -187,9 +192,9 @@ class SGRV:
         predition_label = int(np.round(prediction_score, 0))
         return predition_label, prediction_score
 
-    def apply_sgrv(self, sentence, scores, list_length, alpha, threshold):
+    def apply_sgrv(self, sentence, scores, prediction_label, list_length, alpha, threshold):
         softmax_output = self.get_softmax(
-            scores, alpha)
+            scores, prediction_label, alpha)
         tokenized_sentence = self._sentence_to_list(sentence)
         subs = self.get_list_of_substitutions(
             tokenized_sentence, softmax_output, threshold, list_length)
@@ -213,20 +218,22 @@ class SGRV:
             df.apply(lambda x: self.apply_sgrv(
                 x['perturbed_text'],
                 x['scores_perturbed'],
+                x['predicted_perturbed_label'],
                 **inputs
-            ), axis=1
+            )  if x['scores_perturbed'] is not np.nan else [np.nan, np.nan], axis=1
         ).apply(pd.Series)
 
-        df['defense_vs_attack_label_diff'] = df['defense_output_label'] != df['predicted_perturbed_label']
+        df['defense_vs_attack_label_diff'] = (df['defense_output_label'] != df['predicted_perturbed_label']) & (df['predicted_perturbed_label'].notna())
         df['attack_vs_defense_score_diff'] = df['perturbed_output_score'] - \
             df['defense_output_score']
-        df['predict_as_attack'] = df['attack_vs_defense_score_diff'] > delta
+        df['predict_as_attack'] = (df['attack_vs_defense_score_diff'] > delta) & (df['predicted_perturbed_label'].notna())
 
         # check accuracy on original
         df[['original_replaced_output_label', 'original_replaced_output_score']] = \
             df.apply(lambda x: self.apply_sgrv(
                 x['original_text'],
                 x['scores_original'],
+                x['original_predicted_label'],
                 **inputs
             ), axis=1
         ).apply(pd.Series)
