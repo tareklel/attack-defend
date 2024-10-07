@@ -65,21 +65,21 @@ class SGRV:
         stop_words = set(stopwords.words('english'))
         punctuations = set(string.punctuation)
 
-        # sorted_dict = {k:v for k, v in sorted(
-        #    self.defense_input.word_freq.items(),
-        #    key=lambda item: item[1],
-        #    reverse=True
-        #    )}
+        sorted_dict = {k:v for k, v in sorted(
+            self.defense_input.word_freq.items(),
+            key=lambda item: item[1],
+            reverse=True
+           )}
 
-        # top_threshold = round(len(sorted_dict.keys())*threshold)
-        # [self.commonwords.add(x) for x in list(sorted_dict.keys())[:top_threshold]]
+        top_threshold = round(len(sorted_dict.keys())*threshold)
+        [self.commonwords.add(x) for x in list(sorted_dict.keys())[:top_threshold]]
         [self.commonwords.add(x) for x in punctuations]
         [self.commonwords.add(x) for x in stop_words]
 
     def get_softmax(self, sorted_word_info, prediction_label, alpha=1):
         row = sorted_word_info.copy()
-        #row = {x: row[x] for x in row if row[x]['word_name'].lower(
-        #    ) not in  self.commonwords}
+        row = {x: row[x] for x in row if row[x]['word_name'].lower(
+            ) not in  self.commonwords}
         for x in row.keys():
             if prediction_label == 0:
                 row[x]['exponent'] = np.e**(((1 + row[x]['saliency'])/2)**2 * alpha)
@@ -286,32 +286,42 @@ class SGRV:
                     result_df = self.apply_defense_and_reattack(
                         df_copy, number_of_votes, alpha, threshold)
 
-                    # Assess the defense using restored_accuracy
+                    # Assess the defense using f1_score
                     metrics = assess_defense(result_df)
                     restored_accuracy = metrics['restored_accuracy']
+                    negative_precision = metrics['negative_precision']
+                    negative_recall = metrics['negative_recall']
+                    f1_negative = metrics['f1_negative']
 
                     # Calculate delta
                     cond = (df_copy['ground_truth_label'] ==
-                            df_copy['original_predicted_label'])
+                            df_copy['original_predicted_label']) & df['ground_truth_label'] == 1
                     df_copy.loc[cond, 'delta'] = df_copy['original_prediction_score'] - \
                         df_copy['original_replaced_output_score']
 
                     # Get the 90th percentile of delta
-                    sorted_deltas = df_copy[df_copy['delta'].notna(
-                    )]['delta'].sort_values()
-                    delta = np.percentile(sorted_deltas, 90)
+                    # sorted_deltas = df_copy[df_copy['delta'].notna(
+                    #)]['delta'].sort_values()
+                    # delta = np.percentile(sorted_deltas, 90)
 
                     # Update the best score and parameters if the current score is better
-                    if restored_accuracy > best_score:
-                        best_score = restored_accuracy
+                    if f1_negative > best_score:
+                        best_score = f1_negative
                         best_params = {
                             'number_of_votes': number_of_votes,
                             'alpha':alpha,
                             'word_threshold':threshold,
-                            'delta': delta
+                            # 'delta': delta
+                        }
+
+                        best_performance = {
+                            'f1_negative':f1_negative,
+                            'negative_precision':negative_precision,
+                            'negative_recall':negative_recall,
+                            'restored_accuracy': restored_accuracy
                         }
                         print(best_params)
-                        print(best_score)
+                        print(best_performance)
 
         # Return the best parameters, restored accuracy, and recommended delta
-        return best_params, best_score
+        return best_params, best_performance

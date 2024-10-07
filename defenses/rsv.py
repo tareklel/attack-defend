@@ -80,13 +80,13 @@ class RSV():
         df['attack_vs_defense_score_diff'] = None
         df['predict_as_attack'] = None
 
-        df[['defense_output_label', 'defense_output_score']] = df['perturbed_text']\
-            .apply(lambda x: self.apply_rsv(x, proportion_of_words, list_length))\
+        df[['defense_output_label', 'defense_output_score']] = df\
+            .apply(lambda x: self.apply_rsv(x['perturbed_text'], proportion_of_words, list_length)   if x['scores_perturbed'] is not np.nan else [np.nan, np.nan], axis=1)\
             .apply(pd.Series)
 
-        df['defense_vs_attack_label_diff'] = df['defense_output_label'] != df['predicted_perturbed_label']
+        df['defense_vs_attack_label_diff'] = (df['defense_output_label'] != df['predicted_perturbed_label']) & (df['predicted_perturbed_label'].notna())
         df['attack_vs_defense_score_diff'] = df['perturbed_output_score'] - df['defense_output_score']
-        df['predict_as_attack'] = df['attack_vs_defense_score_diff'] > gamma
+        df['predict_as_attack'] = (df['attack_vs_defense_score_diff'] > gamma)  & (df['predicted_perturbed_label'].notna())
 
         # check accuracy on original
         df[['original_replaced_output_label', 'original_replaced_output_score']] = df['original_text']\
@@ -133,29 +133,39 @@ class RSV():
                 # Assess the defense using restored_accuracy
                 metrics = assess_defense(result_df)
                 restored_accuracy = metrics['restored_accuracy']
+                restored_accuracy = metrics['restored_accuracy']
+                negative_precision = metrics['negative_precision']
+                negative_recall = metrics['negative_recall']
+                f1_negative = metrics['f1_negative']
 
-                # Apply RSV to the original text for the gamma calculation
-                df_copy[['defense_original_output_score', 'defense_original_output_label']] = df_copy['original_text']\
-                    .apply(lambda x: self.apply_rsv(x, proportion_of_words, number_of_votes))\
-                    .apply(pd.Series)
+                # Calculate delta
+                cond = (df_copy['ground_truth_label'] ==
+                        df_copy['original_predicted_label']) & df['ground_truth_label'] == 1
+                df_copy.loc[cond, 'delta'] = df_copy['original_prediction_score'] - \
+                    df_copy['original_replaced_output_score']
 
-                # Calculate gamma
-                cond = (df_copy['ground_truth_label'] == df_copy['original_predicted_label'])
-                df_copy.loc[cond, 'gamma'] = df_copy['original_prediction_score'] - df_copy['defense_original_output_score']
-
-                # Get the 90th percentile of gamma
-                sorted_gammas = df_copy[df_copy['gamma'].notna()]['gamma'].sort_values()
-                gamma = np.percentile(sorted_gammas, 90)
-
+                # Get the 90th percentile of delta
+                # sorted_deltas = df_copy[df_copy['delta'].notna(
+                #)]['delta'].sort_values()
+                # delta = np.percentile(sorted_deltas, 90)
 
                 # Update the best score and parameters if the current score is better
-                if restored_accuracy > best_score:
-                    best_score = restored_accuracy
+                if f1_negative > best_score:
+                    best_score = f1_negative
                     best_params = {
                         'number_of_votes': number_of_votes,
-                        'proportion_of_words': proportion_of_words,
-                        'gamma':gamma
+                        'proportion_of_words':proportion_of_words
+                        # 'delta': delta
                     }
+
+                    best_performance = {
+                        'f1_negative':f1_negative,
+                        'negative_precision':negative_precision,
+                        'negative_recall':negative_recall,
+                        'restored_accuracy': restored_accuracy
+                    }
+                    print(best_params)
+                    print(best_performance)
 
         # Return the best parameters, restored accuracy, and recommended gamma
         return best_params, best_score

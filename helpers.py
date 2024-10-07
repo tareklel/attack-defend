@@ -177,49 +177,60 @@ def process_analytical_dataset(results):
 def assess_defense(df):
     original_accurate = df['ground_truth_label'] == df['original_predicted_label']
     original_accuracy = original_accurate.sum() / len(df['ground_truth_label'])
+    original_positive_accuracy = ((df['ground_truth_label'] == 1) & (df['original_predicted_label'] == 1)).sum()/(df['ground_truth_label'] == 1).sum()
     adversarial_accurate = df['ground_truth_label'] == df['predicted_perturbed_label']
-    adversarial_accuracy = adversarial_accurate.sum() / len(df['ground_truth_label'])
+    adversarial_accuracy = adversarial_accurate.sum() / len(df[df['predicted_perturbed_label'].notna()]['ground_truth_label'])
     defense_accurate = df['defense_output_label'] == df['ground_truth_label']
-    restored_accuracy = defense_accurate.sum() / len(df['ground_truth_label'])
+    restored_accuracy = defense_accurate.sum() / len(df[df['predicted_perturbed_label'].notna()]['ground_truth_label'])
     restored_accuracy_delta = restored_accuracy - adversarial_accuracy
     # positive here means is adversarial
+    negative_tp = (df['ground_truth_label'] == 0) & (df['defense_output_label'] == 0)
+    negative_fp = (df['ground_truth_label'] == 1) & (df['original_replaced_output_label'] == 0)
+    negative_precision = negative_tp.sum() / (negative_tp.sum() + negative_fp.sum())
+    negative_fn = (df['ground_truth_label'] == 0)  & (df['defense_output_label'] == 1)
+    negative_recall = negative_tp.sum() / (negative_tp.sum() + negative_fn.sum()) 
+    f1_negative = 2*(negative_precision * negative_recall)/(negative_precision + negative_recall)
 
     # adversarial
-    adversarial_fn = ~(df['predict_as_attack']) & (df['attack_success'])
-    adversarial_fnr = adversarial_fn.sum() / df['attack_success'].sum()
+    # adversarial_fn = ~(df['predict_as_attack']) & (df['attack_success'])
+    # adversarial_fnr = adversarial_fn.sum() / df['attack_success'].sum()
     # recall tp / (tp+fn)
-    adversarial_tp = (df['predict_as_attack']) & (df['attack_success'])
-    adversarial_recall = adversarial_tp.sum() / df['attack_success'].sum()
+    # adversarial_tp = (df['predict_as_attack']) & (df['attack_success'])
+    # adversarial_recall = adversarial_tp.sum() / df['attack_success'].sum()
     # precision tp / (tp+fp)
-    adversarial_precision = adversarial_tp.sum() / df['predict_as_attack'].sum()
-    adversarial_f1 = 2*(adversarial_precision*adversarial_recall)/(adversarial_precision + adversarial_recall)
+    # adversarial_precision = adversarial_tp.sum() / df['predict_as_attack'].sum()
+    # adversarial_f1 = 2*(adversarial_precision*adversarial_recall)/(adversarial_precision + adversarial_recall)
 
     # defense
-    df['attack_success_original_success'] = (df['attack_success'].apply(lambda x: True if x==1 else False)) & ~df['original_model_fail_prediction'].apply(lambda x: False if x==0 else True)
-    defense_fn = ~(df['predict_as_attack']) & df['attack_success_original_success']
-    defense_fnr = defense_fn.sum() / df['attack_success_original_success'].sum()
+    # df['attack_success_original_success'] = (df['attack_success'].apply(lambda x: True if x==1 else False)) & ~df['original_model_fail_prediction'].apply(lambda x: False if x==0 else True)
+    # defense_fn = ~(df['predict_as_attack']) & df['attack_success_original_success']
+    # defense_fnr = defense_fn.sum() / df['attack_success_original_success'].sum()
     # recall tp / (tp+fn)
-    defense_tp = (df['predict_as_attack']) & (df['attack_success_original_success'])
-    defense_recall = defense_tp.sum() / df['attack_success_original_success'].sum()
+    # defense_tp = (df['predict_as_attack']) & (df['attack_success_original_success'])
+    # defense_recall = defense_tp.sum() / df['attack_success_original_success'].sum()
     # precision tp / (tp+fp)
-    df['predict_attack_original_success'] = (df['predict_as_attack'].apply(lambda x: True if x==1 else False)) & ~df['original_model_fail_prediction'].apply(lambda x: False if x==0 else True)
-    defense_precision = defense_tp.sum() / df['predict_attack_original_success'].sum()
-    defense_f1 = 2*(defense_precision*defense_recall)/(defense_precision + defense_recall)
+    # df['predict_attack_original_success'] = (df['predict_as_attack'].apply(lambda x: True if x==1 else False)) & ~df['original_model_fail_prediction'].apply(lambda x: False if x==0 else True)
+    # defense_precision = defense_tp.sum() / df['predict_attack_original_success'].sum()
+    # defense_f1 = 2*(defense_precision*defense_recall)/(defense_precision + defense_recall)
 
     benign_accuracy = df['original_replaced_label_correct'].sum() / len(df['ground_truth_label'])
 
     return {
         'original_accuracy':original_accuracy,
+        'original_positive_accuracy':original_positive_accuracy,
         'benign_accuracy':benign_accuracy,
         'adversarial_accuracy':adversarial_accuracy,
         'restored_accuracy':restored_accuracy,
+        'negative_precision':negative_precision,
+        'negative_recall':negative_recall,
+        'f1_negative':f1_negative,
         # delta between restored_accuracy and adversarial_accuracy
         'restored_accuracy_delta':restored_accuracy_delta,
         # check if adversarial incorrectly labeled as non-adversarial
-        'defense_false_negative_rate':defense_fnr,
-        'defense_recall':defense_recall,
-        'defense_precision':defense_precision,
-        'defense_f1-score':defense_f1
+        # 'defense_false_negative_rate':defense_fnr,
+        # 'defense_recall':defense_recall,
+        # 'defense_precision':defense_precision,
+        # 'defense_f1-score':defense_f1
     }
 
 

@@ -4,6 +4,8 @@ from attackdefend import TextDefend
 from tqdm import tqdm
 import pandas as pd
 import re
+from helpers import assess_defense
+
 
 
 class FGWS():
@@ -71,15 +73,15 @@ class FGWS():
         df['attack_vs_defense_score_diff'] = None
         df['predict_as_attack'] = None
 
-        df['replaced_sentence'] = df['perturbed_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
-        df[['defense_output_score', 'defense_output_label']] = df['replaced_sentence']\
-            .apply(lambda x: textdefend.get_prediction_and_score(x))\
+        df['replaced_sentence'] = df.apply(lambda x: self.replace_low_frequency_words(x['perturbed_text'], delta, word_freq, union_group)   if x['scores_perturbed'] is not np.nan else [np.nan, np.nan], axis=1)
+        df[['defense_output_score', 'defense_output_label']] = df\
+            .apply(lambda x: textdefend.get_prediction_and_score(x['replaced_sentence'])   if x['scores_perturbed'] is not np.nan else [np.nan, np.nan], axis=1)\
             .apply(pd.Series)
 
         # Append the results to the DataFrame
-        df['defense_vs_attack_label_diff'] = df['defense_output_label'] != df['predicted_perturbed_label']
+        df['defense_vs_attack_label_diff'] = (df['defense_output_label'] != df['predicted_perturbed_label'])  & (df['predicted_perturbed_label'].notna())
         df['attack_vs_defense_score_diff'] = df['perturbed_output_score'] - df['defense_output_score']
-        df['predict_as_attack'] = df['attack_vs_defense_score_diff'] > gamma
+        df['predict_as_attack'] = (df['attack_vs_defense_score_diff'] > gamma)  & (df['predicted_perturbed_label'].notna())
 
         # check accuracy on original
         df['original_replaced'] = df['original_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
@@ -103,53 +105,54 @@ class FGWS():
         frequencies = sorted([freq for word, freq in defense_input.word_freq.items() if word in defense_input.union_group])
         return np.percentile(frequencies, percentile)
 
-    def find_best_delta_gamma(self, percentiles, defense_input, dataframe, textdefend):
-        """
-        Find the best delta that maximizes restored accuracy while keeping false positives below the threshold.
-        """
-        best_delta = None
-        best_gamma = None
-        best_restored_accuracy = 0
+    def greedy_search(self, percentiles, defense_input, dataframe, textdefend):
+        
         df = dataframe.copy()
         word_freq = defense_input.word_freq
         union_group = defense_input.union_group
+        best_score = float('-inf')
+        best_params = {}
 
         for percentile in tqdm(percentiles):
             delta = self.find_delta_by_percentile(percentile, defense_input)
+            df_copy = df.copy()  # Copy the dataframe to avoid overwriting original data
 
-            df['replaced_perturbed_sentence'] = df['perturbed_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
-            df['replaced_original_sentence'] = df['original_text'].apply(lambda x: self.replace_low_frequency_words(x, delta, word_freq, union_group))
+            result_df = self.apply_defense_and_reattack(
+                        df_copy, textdefend, defense_input, delta)
 
-            df[['defense_perturbed_output_score', 'defense_perturbed_output_label']] = df['replaced_perturbed_sentence']\
-            .apply(lambda x: textdefend.get_prediction_and_score(x))\
-            .apply(pd.Series)
+            # Assess the defense using f1_score
+            metrics = assess_defense(result_df)
+            restored_accuracy = metrics['restored_accuracy']
+            negative_precision = metrics['negative_precision']
+            negative_recall = metrics['negative_recall']
+            f1_negative = metrics['f1_negative']
 
-            df[['defense_original_output_score', 'defense_original_output_label']] = df['replaced_original_sentence']\
-            .apply(lambda x: textdefend.get_prediction_and_score(x))\
-            .apply(pd.Series)
+            # Calculate delta
+            cond = (df_copy['ground_truth_label'] ==
+                    df_copy['original_predicted_label']) & df['ground_truth_label'] == 1
+            df_copy.loc[cond, 'delta'] = df_copy['original_prediction_score'] - \
+                df_copy['original_replaced_output_score']
 
-            # get gamma
-            cond = (df['ground_truth_label'] == df['original_predicted_label'])
-            df.loc[cond, 'gamma'] = df['original_prediction_score'] - df['defense_original_output_score']
+            # Get the 90th percentile of delta
+            # sorted_deltas = df_copy[df_copy['delta'].notna(
+            #)]['delta'].sort_values()
+            # delta = np.percentile(sorted_deltas, 90)
 
-            sorted_gammas = df[df.gamma.notna()]['gamma'].sort_values()
-            gamma = np.percentile(sorted_gammas, 90)
+            # Update the best score and parameters if the current score is better
+            if f1_negative > best_score:
+                best_score = f1_negative
+                best_params = {
+                    'delta': delta
+                }
 
-            # evaluate defense
-            df['is_adversarial'] = df['perturbed_output_score'] - df['defense_perturbed_output_score'] > gamma
+                best_performance = {
+                    'f1_negative':f1_negative,
+                    'negative_precision':negative_precision,
+                    'negative_recall':negative_recall,
+                    'restored_accuracy': restored_accuracy
+                }
+                print(best_params)
+                print(best_performance)
 
-            df['inaccurate_denominator'] = (df['ground_truth_label'] != df['predicted_perturbed_label'])&(df['ground_truth_label'] == df['original_predicted_label'])
-            df['correct_prediction'] = (df['ground_truth_label'] == df['defense_perturbed_output_label'])
-            df['restored_accuracy_count'] = (df['correct_prediction']) & (df['is_adversarial']) & (df['inaccurate_denominator'])
-            
-            restored_accuracy = df['restored_accuracy_count'].sum() / df['inaccurate_denominator'].sum()
-            
-            print(f"percentile:{percentile}, \
-                restored_accuracy:{restored_accuracy}, \
-                gamma:{gamma}")
-            if restored_accuracy > best_restored_accuracy:
-                best_delta = delta
-                best_restored_accuracy = restored_accuracy
-                best_gamma = gamma
-
-        return best_delta, best_gamma
+        # Return the best parameters, restored accuracy, and recommended delta
+        return best_params, best_performance
