@@ -1,15 +1,42 @@
 import argparse
+import os
+import logging  # Import the logging library
 import helpers
-from helpers import DatasetManager
+from helpers import DefenseInput
 import pandas as pd
 from attackdefend import TextDefend
 from textattack.attack_recipes import PWWSRen2019, BAEGarg2019, TextFoolerJin2019
 from sgrv import SGRV
-from helpers import DefenseInput
+from defenses.rsv import RSV
+from defenses.fgws import FGWS
 import numpy as np
+import ast
 
+# Set up the logger
+def setup_logger(log_file_path):
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
 
-# Define a function to map attack strings to attack objects
+    # Create a file handler for writing log to file
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setLevel(logging.INFO)
+
+    # Create a console handler for printing to console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # Add handlers to the logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
+
+# Function to map attack strings to attack objects
 def get_attack_class(attack_name):
     if attack_name == 'PWWSRen2019':
         return PWWSRen2019
@@ -20,132 +47,97 @@ def get_attack_class(attack_name):
     else:
         raise ValueError(f"Unknown attack type: {attack_name}")
 
+def create_directory_for_test_set(test_set):
+    # Create a directory for saving resources based on the test_set name
+    dir_name = os.path.join('saved_resources', os.path.splitext(os.path.basename(test_set))[0])
+    os.makedirs(dir_name, exist_ok=True)
+    return dir_name
 
-def main(algorithm, dataset_name, attack_name, num_examples):
-    # Initialize the model and dataset
-    print(f"Initializing model: {algorithm}")
+def log_variables_to_file(dir_name, variables):
+    log_file_path = os.path.join(dir_name, 'output.txt')
+    try:
+        with open(log_file_path, 'w') as file:
+            for variable_name, variable_value in variables:
+                file.write(f"### {variable_name} ###\n")
+                file.write(str(variable_value))
+                file.write("\n\n")
+                logging.info(f"Saved to file: {variable_name}")  # Log confirmation for each saved variable
+        logging.info(f"Results have been successfully logged to: {log_file_path}")
+    except Exception as e:
+        logging.error(f"Error occurred while logging to file: {e}")
+
+def main(algorithm, validation_set, test_set, word_frequency):
+    # Create directory for saving outputs based on the test set name
+    save_dir = create_directory_for_test_set(test_set)
+    log_file_path = os.path.join(save_dir, 'process.log')
+    
+    # Set up the logger
+    logger = setup_logger(log_file_path)
+    logger.info(f"Starting the process with algorithm: {algorithm}")
+
+    logger.info("Step 1: Initializing the model")
     nlp_model = TextDefend(algorithm)
-    
-    print(f"Loading dataset: {dataset_name}")
-    datamanager = DatasetManager(dataset_name)
-    datamanager.create_validation_set([0, 1], num_examples)
-    datamanager.create_test_set([0, 1], num_examples)
-    print(f"Dataset loaded")
-    
-    # Select the attack type
-    print(f"Setting up attack: {attack_name}")
-    attack_class = get_attack_class(attack_name)
 
-    # Run the attack on the test set
-    print("Running attack on test set...")
-    nlp_model.init_attack(attack_class)
-    nlp_model.set_up_attacker(datamanager.test_set_0, len(datamanager.test_set_0))
-    nlp_model.get_attack_results()
-    print("Attack on test set complete.")
+    logger.info("Step 2: Loading validation and test datasets")
+    validate = pd.read_csv(validation_set)
+    validate['scores_original'] = validate['scores_original'].apply(ast.literal_eval)
+    validate['scores_perturbed'] = validate['scores_perturbed'].apply(lambda x: ast.literal_eval(x) if x is not np.nan else np.nan)
 
-    # Process and save the test set results
-    print("Processing test set results...")
-    df_test_0 = helpers.process_analytical_dataset(nlp_model.result)
-    df_test_1 = [[datamanager.test_set_1[x][0]['text'], 
-    datamanager.test_set_1[x][1]] for x in range(len(datamanager.test_set_1))]
-    df_test_1 = pd.DataFrame(df_test_1, columns=['original_text', 'ground_truth_label'])
-    df_test_1[['original_prediction_score', 'original_predicted_label']] = df_test_1['original_text'].apply(lambda x: nlp_model.get_prediction_and_score(x)).apply(pd.Series)
-    # Specify columns to impute from df1's first row
-    impute_values = df_test_0.iloc[0]  # First row of df1
+    test = pd.read_csv(test_set)
+    test['scores_original'] = test['scores_original'].apply(ast.literal_eval)
+    test['scores_perturbed'] = test['scores_perturbed'].apply(lambda x: ast.literal_eval(x) if x is not np.nan else np.nan)
 
-    # Reindex df2 to match df1's columns (this will add NaN for missing columns)
-    df_test_1 = df_test_1.reindex(columns=df_test_0.columns)
-
-    # Impute the missing columns explicitly using the first row of df1
-    for col in ['dataset', 'model', 'attack_name']:
-        df_test_1[col].fillna(impute_values[col], inplace=True)
-
-    # Concatenate df1 and df2_reindexed (this is the joined DataFrame)
-    result_df_test = pd.concat([df_test_0, df_test_1], ignore_index=True)
-
-
-
-    file_name = f'{algorithm}_{dataset_name}_test_{attack_name}_df'.replace('/','_')
-    test_file_name = f'saved_resources/{file_name}.csv'
-    result_df_test.to_csv(test_file_name, index=False)
-    print(f"Test set results saved to {test_file_name}")
-
-    # Run the attack on the validation set
-    print("Running attack on validation set...")
-    nlp_model.init_attack(attack_class)
-    nlp_model.set_up_attacker(datamanager.validation_set_0, len(datamanager.validation_set_0))
-    nlp_model.get_attack_results()
-    print("Attack on validation set complete.")
-
-    # Process and save the validation set results
-    print("Processing validation set results...")
-    df_validation_0 = helpers.process_analytical_dataset(nlp_model.result)
-    df_validation_1 = [[datamanager.validation_set_1[x][0]['text'], 
-    datamanager.validation_set_1[x][1]] for x in range(len(datamanager.validation_set_1))]
-    df_validation_1 = pd.DataFrame(df_validation_1, columns=['original_text', 'ground_truth_label'])
-    df_validation_1[['original_prediction_score', 'original_predicted_label']] = df_validation_1['original_text'].apply(lambda x: nlp_model.get_prediction_and_score(x)).apply(pd.Series)
-    # Specify columns to impute from df1's first row
-    impute_values = df_test_0.iloc[0]  # First row of df1
-
-    # Reindex df2 to match df1's columns (this will add NaN for missing columns)
-    df_validation_1 = df_validation_1.reindex(columns=df_validation_0.columns)
-
-    # Impute the missing columns explicitly using the first row of df1
-    for col in ['dataset', 'model', 'attack_name']:
-        df_validation_1[col].fillna(impute_values[col], inplace=True)
-
-    # Concatenate df1 and df2_reindexed (this is the joined DataFrame)
-    result_df_validation = pd.concat([df_validation_0, df_validation_1], ignore_index=True)
-
-    
-    file_name = f'{algorithm}_{dataset_name}_validation_{attack_name}_df'.replace('/','_')
-    validation_file_name = f'saved_resources/{file_name}.csv'
-    result_df_validation.to_csv(validation_file_name, index=False)
-    print(f"Validation set results saved to {validation_file_name}")
-
+    logger.info("Step 3: Initializing DefenseInput and loading resources")
     defense_input = DefenseInput()
-    if dataset_name == 'yelp_polarity':
-        train_path = 'saved_resources/train_yelp_text.pkl'
-        train_frequency = 'saved_resources/train_yelp_word_frequency.pkl'
-    elif dataset_name == 'stanfordnlp/imdb':
-        train_path = 'saved_resources/train_imdb_text.pkl'
-        train_frequency = 'saved_resources/train_imdb_word_frequency.pkl'
-    
-    defense_input.extract_text_from_dataset(train_path, datamanager.train_set)
-    defense_input.count_word_frequencies(train_frequency)
-
+    defense_input.count_word_frequencies(word_frequency)
     defense_input.load_glove_embeddings('saved_resources/glove.6B.50d.txt')
     defense_input.load_grouped_words('saved_resources/nearest_neighbors_glove_embeddings.pkl')
     defense_input.union_wordnet_neighbors()
-    
+
+    logger.info("Step 4: Running SGRV defense")
     sgrv = SGRV(nlp_model, defense_input)
-    sgrv.get_stop_words()
-    result_df_test['scores_original'] = result_df_test['original_text'].apply(lambda x: sgrv.get_scores(x))
-    result_df_test['scores_perturbed'] = result_df_test['perturbed_text'].apply(lambda x: sgrv.get_scores(x) if x is not np.nan else np.nan)
-    result_df_test.to_csv(test_file_name, index=False)
-    print('saliency scores added for test')
+    sgrv.get_stop_words(0)
+    inputs = {'list_number_of_votes': [5, 7, 9], 'list_alpha': [0.5, 1, 3, 5, 10, 20, 30], 'threshold_list': [0.25, 0.33, 0.5, 1]}
+    best_params_sgrv_validate, best_performance_sgrv_validate = sgrv.greedy_search(validate, **inputs)
+    sgrv_defense = sgrv.apply_defense_and_reattack(test, **best_params_sgrv_validate)
+    sgrv_assessment = helpers.assess_defense(sgrv_defense)
 
-    result_df_validation['scores_original'] = result_df_validation['original_text'].apply(lambda x: sgrv.get_scores(x))
-    result_df_validation['scores_perturbed'] = result_df_validation['perturbed_text'].apply(lambda x: sgrv.get_scores(x) if x is not np.nan else np.nan)
-    result_df_validation.to_csv(validation_file_name, index=False)
-    print('saliency scores added for test')
+    logger.info("Step 5: Running RSV defense")
+    rsv = RSV(nlp_model, defense_input)
+    rsv.get_stop_words(0.02)
+    best_params_rsv_validate, best_performance_rsv_validate = rsv.greedy_search(validate, [1, 2, 3, 5, 10, 25], [0.5, 0.6, 0.7, 0.8, 0.9, 1])
+    rsv_defense = rsv.apply_defense_and_reattack(test, **best_params_rsv_validate)
+    rsv_assessment = helpers.assess_defense(rsv_defense)
 
+    logger.info("Step 6: Running FGWS defense")
+    fgws = FGWS()
+    best_params_fgws_validate, best_performance_fgws_validate = fgws.greedy_search([10, 20, 30, 40, 50, 60, 70, 80, 90, 100], defense_input, validate, nlp_model)
+    fgws_defense = fgws.apply_defense_and_reattack(test, **best_params_fgws_validate)
+    fgws_assessment = helpers.assess_defense(fgws_defense)
 
-    print("Script finished successfully!")
+    logger.info("Step 7: Saving specific variables to the output file")
+    # Save variables to a file if they match the specified suffixes
+    variables_to_log = [
+        ('fgws_assessment', fgws_assessment),
+        ('fgws_defense', fgws_defense),
+        ('fgws_validate', best_params_fgws_validate),
+        ('rsv_assessment', rsv_assessment),
+        ('rsv_defense', rsv_defense),
+        ('rsv_validate', best_params_rsv_validate),
+        ('sgrv_assessment', sgrv_assessment),
+        ('sgrv_defense', sgrv_defense),
+        ('sgrv_validate', best_params_sgrv_validate)
+    ]
+    log_variables_to_file(save_dir, variables_to_log)
 
+    logger.info("All steps completed successfully.")
 
-if __name__ == '__main__':
-    # Set up argument parsing
-    parser = argparse.ArgumentParser(description='Run text attack on a specified dataset and model')
-    
-    # Add arguments
-    parser.add_argument('--algorithm', type=str, required=True, help='The model/algorithm to use (e.g., nlp_model-imdb)')
-    parser.add_argument('--dataset', type=str, required=True, help='The dataset to use (e.g., stanfordnlp/imdb)')
-    parser.add_argument('--attack', type=str, required=True, choices=['PWWSRen2019', 'BAEGarg2019', 'TextFoolerJin2019'], help='The attack type (PWWSRen2019, BAEGarg2019, TextFoolerJin2019)')
-    parser.add_argument('--num_examples', type=int, required=True, help='Number of examples in validation and test')
-    
-    # Parse arguments
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run defense algorithms on a test set.")
+    parser.add_argument('--algorithm', type=str, required=True, help='Algorithm to use for the model')
+    parser.add_argument('--validation_set', type=str, required=True, help='Path to the validation set CSV file')
+    parser.add_argument('--test_set', type=str, required=True, help='Path to the test set CSV file')
+    parser.add_argument('--word_frequency', type=str, required=True, help='Path to the word frequency file')
+
     args = parser.parse_args()
-    
-    # Run the main function with parsed arguments
-    main(args.algorithm, args.dataset, args.attack, args.num_examples)
+    main(args.algorithm, args.validation_set, args.test_set, args.word_frequency)

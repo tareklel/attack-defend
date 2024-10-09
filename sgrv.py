@@ -176,9 +176,9 @@ class SGRV:
         # Return the modified sentence
         return ''.join(token_sentence)
 
-    def get_list_of_substitutions(self, tokenized_sentence, softmax_output, threshold, list_length=1):
+    def get_list_of_substitutions(self, tokenized_sentence, softmax_output, threshold, number_of_votes=1):
         subs = []
-        for x in range(list_length):
+        for x in range(number_of_votes):
             subbed_text = self.substitute_words(
                 tokenized_sentence, softmax_output, threshold, seed=x)
             subs.append(subbed_text)
@@ -192,15 +192,15 @@ class SGRV:
         predition_label = int(np.round(prediction_score, 0))
         return predition_label, prediction_score
 
-    def apply_sgrv(self, sentence, scores, prediction_label, list_length, alpha, threshold):
+    def apply_sgrv(self, sentence, scores, prediction_label, number_of_votes, alpha, threshold):
         softmax_output = self.get_softmax(
             scores, prediction_label, alpha)
         tokenized_sentence = self._sentence_to_list(sentence)
         subs = self.get_list_of_substitutions(
-            tokenized_sentence, softmax_output, threshold, list_length)
+            tokenized_sentence, softmax_output, threshold, number_of_votes)
         return self.vote_for_substitution(subs)
 
-    def apply_defense_and_reattack(self, df, list_length, alpha, threshold, delta=0.5):
+    def apply_defense_and_reattack(self, df, number_of_votes, alpha, threshold, delta=0.5):
         # Initialize new columns to store the defense results
         df['defense_output_label'] = None
         df['defense_output_score'] = None
@@ -209,7 +209,7 @@ class SGRV:
         df['predict_as_attack'] = None
 
         inputs = {
-            'list_length': list_length,
+            'number_of_votes': number_of_votes,
             'alpha': alpha,
             'threshold': threshold
         }
@@ -310,7 +310,7 @@ class SGRV:
                         best_params = {
                             'number_of_votes': number_of_votes,
                             'alpha':alpha,
-                            'word_threshold':threshold,
+                            'threshold':threshold,
                             # 'delta': delta
                         }
 
