@@ -128,7 +128,7 @@ def main(algorithm, dataset_name, attack_name, num_examples):
     result_df_validation['scores_original'] = result_df_validation['original_text'].apply(lambda x: sgrv.get_scores(x))
     result_df_validation['scores_perturbed'] = result_df_validation['perturbed_text'].apply(lambda x: sgrv.get_scores(x) if x is not np.nan else np.nan)
     result_df_validation.to_csv(validation_file_name, index=False)
-    print('saliency scores added for test')
+    print('saliency scores added for validation')
 
 
     print("Script finished successfully!")

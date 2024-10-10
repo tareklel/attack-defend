@@ -10,22 +10,41 @@ from transformers import BertTokenizer, BertForSequenceClassification
 from textattack.models.wrappers import HuggingFaceModelWrapper
 
 
+
+
 class TextDefend():
     def __init__(self, model_name: str):
         self.model_name = model_name
         self.model_wrapper = self.init_model()
 
+    def check_model_type(self):
+        model_name = self.model_name.lower()  # Make the string lowercase to handle case-insensitive matching
+        if 'bert' in self.model_name:
+            return 'bert'
+        elif 'cnn' in self.model_name:
+            return 'cnn'
+        elif 'lstm' in self.model_name:
+            return 'lstm'
+        else:
+            return 'unknown'
+
     def init_model(self):
         # get type of model
-        model_type = self.model_name.split('-')[0]
+        model_type = self.check_model_type()
         if model_type == 'lstm':
             lstm_model = textattack.models.helpers.LSTMForClassification.from_pretrained(
                 self.model_name)
             model_wrapper = PyTorchModelWrapper(
                 lstm_model, lstm_model.tokenizer)
             return model_wrapper
+        
+        elif model_type == 'cnn':
+            cnn_model = textattack.models.helpers.WordCNNForClassification.from_pretrained(self.model_name)
+            model_wrapper = PyTorchModelWrapper(
+                cnn_model, cnn_model.tokenizer)
+            return model_wrapper
+        
         elif model_type == 'bert':
-
             # Load the pretrained BERT model and tokenizer
             bert_model = BertForSequenceClassification.from_pretrained(self.model_name)
             tokenizer = BertTokenizer.from_pretrained(self.model_name)

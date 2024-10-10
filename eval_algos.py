@@ -153,3 +153,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(args.algorithm, args.validation_set, args.test_set, args.word_frequency)
+
+    # python3 eval_algos.py --algorithm lstm-imdb --validation_set saved_resources/mini_validate.csv --test_set saved_resources/mini_test.csv --word_frequency saved_resources/train_imdb_word_frequency.pkl
