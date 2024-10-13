@@ -5,16 +5,15 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from textattack.models.wrappers import PyTorchModelWrapper
-import torch 
+import torch
 from transformers import BertTokenizer, BertForSequenceClassification
 from textattack.models.wrappers import HuggingFaceModelWrapper
-
-
 
 
 class TextDefend():
     def __init__(self, model_name: str):
         self.model_name = model_name
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check if GPU is available
         self.model_wrapper = self.init_model()
 
     def check_model_type(self):
@@ -29,17 +28,19 @@ class TextDefend():
             return 'unknown'
 
     def init_model(self):
-        # get type of model
         model_type = self.check_model_type()
+        
         if model_type == 'lstm':
             lstm_model = textattack.models.helpers.LSTMForClassification.from_pretrained(
                 self.model_name)
+            lstm_model = lstm_model.to(self.device)  # Move model to GPU if available
             model_wrapper = PyTorchModelWrapper(
                 lstm_model, lstm_model.tokenizer)
             return model_wrapper
         
         elif model_type == 'cnn':
             cnn_model = textattack.models.helpers.WordCNNForClassification.from_pretrained(self.model_name)
+            cnn_model = cnn_model.to(self.device)  # Move model to GPU if available
             model_wrapper = PyTorchModelWrapper(
                 cnn_model, cnn_model.tokenizer)
             return model_wrapper
@@ -47,13 +48,13 @@ class TextDefend():
         elif model_type == 'bert':
             # Load the pretrained BERT model and tokenizer
             bert_model = BertForSequenceClassification.from_pretrained(self.model_name)
+            bert_model = bert_model.to(self.device)  # Move model to GPU if available
             tokenizer = BertTokenizer.from_pretrained(self.model_name)
 
             # Wrap the model with TextAttack's HuggingFaceModelWrapper
             model_wrapper = HuggingFaceModelWrapper(bert_model, tokenizer)
             return model_wrapper
-        else: 
-            # raise error modelnotfound
+        else:
             raise ModuleNotFoundError
 
     def init_attack(self, attack):
@@ -61,7 +62,7 @@ class TextDefend():
     
     def set_up_attacker(self, dataset, num_attacks):
         self.attack_args = AttackArgs(
-            num_examples=num_attacks, 
+            num_examples=num_attacks,
             disable_stdout=True,  # Disable output to console for cleaner display
         )
         self.attacker = Attacker(self.attack, dataset, self.attack_args)
@@ -74,7 +75,7 @@ class TextDefend():
         if isinstance(text, str):
             text = [text]
 
-        # Call the model wrapper to get logits
+        # Move inputs to the device (GPU/CPU)
         evals = self.model_wrapper(text)
         output = []
 
