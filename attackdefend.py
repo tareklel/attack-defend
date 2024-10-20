@@ -81,8 +81,17 @@ class TextDefend():
 
         # Iterate over the logits for each input text
         for logits in evals:
-            # Apply exponentiation to logits and calculate softmax for binary classification
+            # Check if logits are on the GPU, move to CPU if necessary
+            if isinstance(logits, torch.Tensor):
+                # Move the tensor to CPU if it is on a different device (e.g., GPU)
+                if logits.device.type != 'cpu':
+                    logits = logits.cpu()
+                # Convert to NumPy array
+                logits = logits.numpy()
+
             exps = np.exp(logits)
+
+            # Apply exponentiation to logits and calculate softmax for binary classification
             prediction_score = np.round(exps[1] / exps.sum(), 6)
             
             # Determine the predicted label (0 or 1) based on the prediction score
