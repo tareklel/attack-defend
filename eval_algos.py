@@ -105,8 +105,8 @@ def main(algorithm, validation_set, test_set, word_frequency):
     sgrv = SGRV(nlp_model, defense_input)
     sgrv.get_stop_words(0)
     # Original commented-out line
-    # inputs = {'list_number_of_votes': [5, 7, 9], 'list_alpha': [0.5, 1, 3, 5, 10, 20, 30], 'threshold_list': [0.25, 0.33, 0.5, 1]}
-    inputs = {'list_number_of_votes': [5], 'list_alpha': [0.5], 'threshold_list': [0.25]}
+    inputs = {'list_number_of_votes': [5, 7, 9], 'list_alpha': [0.5, 1, 3, 5, 10, 20, 30], 'threshold_list': [0.25, 0.33, 0.5, 1]}
+    # inputs = {'list_number_of_votes': [5], 'list_alpha': [0.5], 'threshold_list': [0.25]}
     best_params_sgrv_validate, best_performance_sgrv_validate = sgrv.greedy_search(validate, **inputs)
     sgrv_defense = sgrv.apply_defense_and_reattack(test, **best_params_sgrv_validate)
     sgrv_assessment = helpers.assess_defense(sgrv_defense)
@@ -115,8 +115,8 @@ def main(algorithm, validation_set, test_set, word_frequency):
     logger.info("Step 5: Running RSV defense")
     rsv = RSV(nlp_model, defense_input)
     # Original commented-out line
-    # best_params_rsv_validate, best_performance_rsv_validate = rsv.greedy_search(validate, [0.5, 0.6, 0.7, 0.8, 0.9, 1], [1, 2, 3, 5, 10, 25], [0, 0.01, 0.02])
-    best_params_rsv_validate, best_performance_rsv_validate = rsv.greedy_search(validate, [0.5], [1], [0])
+    best_params_rsv_validate, best_performance_rsv_validate = rsv.greedy_search(validate, [0.5, 0.6, 0.7, 0.8, 0.9, 1], [1, 2, 3, 5, 10, 25], [0, 0.01, 0.02])
+    #bbest_params_rsv_validate, best_performance_rsv_validate = rsv.greedy_search(validate, [0.5], [1], [0])
     rsv_defense = rsv.apply_defense_and_reattack(test, **best_params_rsv_validate)
     rsv_assessment = helpers.assess_defense(rsv_defense)
     save_defense_to_csv(save_dir, rsv_defense, 'rsv_defense')
@@ -124,8 +124,8 @@ def main(algorithm, validation_set, test_set, word_frequency):
     logger.info("Step 6: Running FGWS defense")
     fgws = FGWS()
     # Original commented-out line
-    # best_params_fgws_validate, best_performance_fgws_validate = fgws.greedy_search([10, 20, 30, 40, 50, 60, 70, 80, 90, 100], defense_input, validate, nlp_model)
-    best_params_fgws_validate, best_performance_fgws_validate = fgws.greedy_search([100], defense_input, validate, nlp_model)
+    best_params_fgws_validate, best_performance_fgws_validate = fgws.greedy_search([10, 20, 30, 40, 50, 60, 70, 80, 90, 100], defense_input, validate, nlp_model)
+    # best_params_fgws_validate, best_performance_fgws_validate = fgws.greedy_search([100], defense_input, validate, nlp_model)
     fgws_defense = fgws.apply_defense_and_reattack(test, nlp_model, defense_input, **best_params_fgws_validate)
     fgws_assessment = helpers.assess_defense(fgws_defense)
     save_defense_to_csv(save_dir, fgws_defense, 'fgws_defense')

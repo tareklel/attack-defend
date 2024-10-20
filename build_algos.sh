@@ -1,6 +1,19 @@
-python3 create_dataset.py --algorithm lstm-imdb --dataset yelp_polarity --attack BAEGarg2019 --num_examples 1000
-python3 create_dataset.py --algorithm lstm-imdb --dataset yelp_polarity --attack PWWSRen2019 --num_examples 1000
-python3 create_dataset.py --algorithm lstm-imdb --dataset yelp_polarity --attack TextFoolerJin2019 --num_examples 1000
-python3 create_dataset.py --algorithm cnn-imdb --dataset yelp_polarity --attack BAEGarg2019 --num_examples 1000
-python3 create_dataset.py --algorithm cnn-imdb --dataset yelp_polarity --attack PWWSRen2019 --num_examples 1000
-python3 create_dataset.py --algorithm cnn-imdb --dataset yelp_polarity --attack TextFoolerJin2019 --num_examples 1000
+python3 create_dataset.py --algorithm lstm-yelp --dataset yelp_polarity --attack BAEGarg2019 --num_examples 1000
+python3 create_dataset.py --algorithm lstm-yelp --dataset yelp_polarity --attack PWWSRen2019 --num_examples 1000
+python3 create_dataset.py --algorithm lstm-yelp --dataset yelp_polarity --attack TextFoolerJin2019 --num_examples 1000
+python3 create_dataset.py --algorithm cnn-yelp --dataset yelp_polarity --attack BAEGarg2019 --num_examples 1000
+python3 create_dataset.py --algorithm cnn-yelp --dataset yelp_polarity --attack PWWSRen2019 --num_examples 1000
+python3 create_dataset.py --algorithm cnn-yelp --dataset yelp_polarity --attack TextFoolerJin2019 --num_examples 1000
+#python3 create_dataset.py --algorithm textattack/bert-base-uncased-yelp-polarity --dataset yelp_polarity --attack BAEGarg2019 --num_examples 1000
+#python3 create_dataset.py --algorithm textattack/bert-base-uncased-yelp-polarity --dataset yelp_polarity --attack PWWSRen2019 --num_examples 1000
+#python3 create_dataset.py --algorithm textattack/bert-base-uncased-yelp-polarity --dataset yelp_polarity --attack TextFoolerJin2019 --num_examples 1000
+#python3 create_dataset.py --algorithm textattack/bert-base-uncased-imdb --dataset stanfordnlp/imdb --attack BAEGarg2019 --num_examples 1000
+#python3 create_dataset.py --algorithm textattack/bert-base-uncased-imdb --dataset stanfordnlp/imdb --attack PWWSRen2019 --num_examples 1000
+#python3 create_dataset.py --algorithm textattack/bert-base-uncased-imdb --dataset stanfordnlp/imdb --attack TextFoolerJin2019 --num_examples 1000
+
+#python3 create_dataset.py --algorithm lstm-imdb --dataset stanfordnlp/imdb --attack BAEGarg2019 --num_examples 1000
+#python3 create_dataset.py --algorithm lstm-imdb --dataset stanfordnlp/imdb --attack PWWSRen2019 --num_examples 1000
+#python3 create_dataset.py --algorithm lstm-imdb --dataset stanfordnlp/imdb --attack TextFoolerJin2019 --num_examples 1000
+#python3 create_dataset.py --algorithm cnn-imdb --dataset stanfordnlp/imdb --attack BAEGarg2019 --num_examples 1000
+#python3 create_dataset.py --algorithm cnn-imdb --dataset stanfordnlp/imdb --attack PWWSRen2019 --num_examples 1000
+#python3 create_dataset.py --algorithm cnn-imdb --dataset stanfordnlp/imdb --attack TextFoolerJin2019 --num_examples 1000
